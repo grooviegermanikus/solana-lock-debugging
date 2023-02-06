@@ -48,6 +48,7 @@ use {
         time::Instant,
     },
 };
+use crate::debugging_lock::RwLockWrapped;
 
 pub const CRDS_GOSSIP_NUM_ACTIVE: usize = 30;
 pub const CRDS_GOSSIP_PUSH_FANOUT: usize = 6;
@@ -65,7 +66,7 @@ pub struct CrdsGossipPush {
     /// Max bytes per message
     max_bytes: usize,
     /// Active set of validators for push
-    active_set: RwLock<IndexMap<Pubkey, AtomicBloom<Pubkey>>>,
+    active_set: RwLockWrapped<IndexMap<Pubkey, AtomicBloom<Pubkey>>>,
     /// Cursor into the crds table for values to push.
     crds_cursor: Mutex<Cursor>,
     /// Cache that tracks which validators a message was received from
@@ -80,7 +81,7 @@ pub struct CrdsGossipPush {
             HashMap</*gossip peer:*/ Pubkey, (/*pruned:*/ bool, /*timestamp:*/ u64)>,
         >,
     >,
-    last_pushed_to: RwLock<LruCache</*node:*/ Pubkey, /*timestamp:*/ u64>>,
+    last_pushed_to: RwLockWrapped<LruCache</*node:*/ Pubkey, /*timestamp:*/ u64>>,
     num_active: usize,
     push_fanout: usize,
     pub(crate) msg_timeout: u64,
@@ -95,10 +96,10 @@ impl Default for CrdsGossipPush {
         Self {
             // Allow upto 64 Crds Values per PUSH
             max_bytes: PACKET_DATA_SIZE * 64,
-            active_set: RwLock::default(),
+            active_set: RwLockWrapped::default(),
             crds_cursor: Mutex::default(),
             received_cache: Mutex::default(),
-            last_pushed_to: RwLock::new(LruCache::new(CRDS_UNIQUE_PUBKEY_CAPACITY)),
+            last_pushed_to: RwLockWrapped::new(LruCache::new(CRDS_UNIQUE_PUBKEY_CAPACITY)),
             num_active: CRDS_GOSSIP_NUM_ACTIVE,
             push_fanout: CRDS_GOSSIP_PUSH_FANOUT,
             msg_timeout: CRDS_GOSSIP_PUSH_MSG_TIMEOUT_MS,
@@ -110,7 +111,7 @@ impl Default for CrdsGossipPush {
     }
 }
 impl CrdsGossipPush {
-    pub fn num_pending(&self, crds: &RwLock<Crds>) -> usize {
+    pub fn num_pending(&self, crds: &RwLockWrapped<Crds>) -> usize {
         let mut cursor: Cursor = *self.crds_cursor.lock().unwrap();
         crds.read().unwrap().get_entries(&mut cursor).count()
     }
@@ -217,7 +218,7 @@ impl CrdsGossipPush {
     /// Returns origins' pubkeys of upserted values.
     pub(crate) fn process_push_message(
         &self,
-        crds: &RwLock<Crds>,
+        crds: &RwLockWrapped<Crds>,
         from: &Pubkey,
         values: Vec<CrdsValue>,
         now: u64,
@@ -267,7 +268,7 @@ impl CrdsGossipPush {
     /// pruned the source addresses.
     pub(crate) fn new_push_messages(
         &self,
-        crds: &RwLock<Crds>,
+        crds: &RwLockWrapped<Crds>,
         now: u64,
     ) -> HashMap<Pubkey, Vec<CrdsValue>> {
         let active_set = self.active_set.read().unwrap();
@@ -345,7 +346,7 @@ impl CrdsGossipPush {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn refresh_push_active_set(
         &self,
-        crds: &RwLock<Crds>,
+        crds: &RwLockWrapped<Crds>,
         stakes: &HashMap<Pubkey, u64>,
         gossip_validators: Option<&HashSet<Pubkey>>,
         self_keypair: &Keypair,
@@ -425,7 +426,7 @@ impl CrdsGossipPush {
 
     fn push_options(
         &self,
-        crds: &RwLock<Crds>,
+        crds: &RwLockWrapped<Crds>,
         self_id: &Pubkey,
         self_shred_version: u16,
         stakes: &HashMap<Pubkey, u64>,
@@ -501,9 +502,9 @@ impl CrdsGossipPush {
         let received_cache = self.received_cache.lock().unwrap().clone();
         let crds_cursor = *self.crds_cursor.lock().unwrap();
         Self {
-            active_set: RwLock::new(active_set),
+            active_set: RwLockWrapped::new(active_set),
             received_cache: Mutex::new(received_cache),
-            last_pushed_to: RwLock::new(last_pushed_to),
+            last_pushed_to: RwLockWrapped::new(last_pushed_to),
             crds_cursor: Mutex::new(crds_cursor),
             num_total: AtomicUsize::new(self.num_total.load(Ordering::Relaxed)),
             num_old: AtomicUsize::new(self.num_old.load(Ordering::Relaxed)),
@@ -531,7 +532,7 @@ mod tests {
 
     #[test]
     fn test_prune() {
-        let crds = RwLock::<Crds>::default();
+        let crds = RwLockWrapped::<Crds>::default();
         let push = CrdsGossipPush::default();
         let mut stakes = HashMap::new();
 
@@ -593,7 +594,7 @@ mod tests {
 
     #[test]
     fn test_process_push_one() {
-        let crds = RwLock::<Crds>::default();
+        let crds = RwLockWrapped::<Crds>::default();
         let push = CrdsGossipPush::default();
         let value = CrdsValue::new_unsigned(CrdsData::ContactInfo(ContactInfo::new_localhost(
             &solana_sdk::pubkey::new_rand(),
@@ -615,7 +616,7 @@ mod tests {
     }
     #[test]
     fn test_process_push_old_version() {
-        let crds = RwLock::<Crds>::default();
+        let crds = RwLockWrapped::<Crds>::default();
         let push = CrdsGossipPush::default();
         let mut ci = ContactInfo::new_localhost(&solana_sdk::pubkey::new_rand(), 0);
         ci.wallclock = 1;
@@ -637,7 +638,7 @@ mod tests {
     }
     #[test]
     fn test_process_push_timeout() {
-        let crds = RwLock::<Crds>::default();
+        let crds = RwLockWrapped::<Crds>::default();
         let push = CrdsGossipPush::default();
         let timeout = push.msg_timeout;
         let mut ci = ContactInfo::new_localhost(&solana_sdk::pubkey::new_rand(), 0);
@@ -660,7 +661,7 @@ mod tests {
     }
     #[test]
     fn test_process_push_update() {
-        let crds = RwLock::<Crds>::default();
+        let crds = RwLockWrapped::<Crds>::default();
         let push = CrdsGossipPush::default();
         let mut ci = ContactInfo::new_localhost(&solana_sdk::pubkey::new_rand(), 0);
         let origin = ci.id;
@@ -704,7 +705,7 @@ mod tests {
             Ok(())
         );
         let keypair = Keypair::new();
-        let crds = RwLock::new(crds);
+        let crds = RwLockWrapped::new(crds);
         let ping_cache = Mutex::new(ping_cache);
         push.refresh_push_active_set(
             &crds,
@@ -804,7 +805,7 @@ mod tests {
             stakes.insert(id, i * 100);
             push.last_pushed_to.write().unwrap().put(id, time);
         }
-        let crds = RwLock::new(crds);
+        let crds = RwLockWrapped::new(crds);
         let mut options = push.push_options(
             &crds,
             &Pubkey::default(),
@@ -861,7 +862,7 @@ mod tests {
             .unwrap();
         crds.insert(node_456, now, GossipRoute::LocalMessage)
             .unwrap();
-        let crds = RwLock::new(crds);
+        let crds = RwLockWrapped::new(crds);
 
         // shred version 123 should ignore nodes with versions 0 and 456
         let options = node
@@ -915,7 +916,7 @@ mod tests {
             .unwrap();
         crds.insert(node_123.clone(), now, GossipRoute::LocalMessage)
             .unwrap();
-        let crds = RwLock::new(crds);
+        let crds = RwLockWrapped::new(crds);
 
         // Unknown pubkey in gossip_validators -- will push to nobody
         let mut gossip_validators = HashSet::new();
@@ -970,7 +971,7 @@ mod tests {
             crds.insert(peer.clone(), now, GossipRoute::LocalMessage),
             Ok(())
         );
-        let crds = RwLock::new(crds);
+        let crds = RwLockWrapped::new(crds);
         let ping_cache = Mutex::new(ping_cache);
         push.refresh_push_active_set(
             &crds,
@@ -1024,7 +1025,7 @@ mod tests {
             crds.insert(peers[1].clone(), now, GossipRoute::LocalMessage),
             Ok(())
         );
-        let crds = RwLock::new(crds);
+        let crds = RwLockWrapped::new(crds);
         assert_eq!(
             push.process_push_message(&crds, &Pubkey::default(), vec![peers[2].clone()], now),
             [Ok(origin[2])],
@@ -1066,7 +1067,7 @@ mod tests {
             crds.insert(peer.clone(), 0, GossipRoute::LocalMessage),
             Ok(())
         );
-        let crds = RwLock::new(crds);
+        let crds = RwLockWrapped::new(crds);
         let ping_cache = Mutex::new(new_ping_cache());
         push.refresh_push_active_set(
             &crds,
@@ -1107,7 +1108,7 @@ mod tests {
             0,
         )));
         assert_eq!(crds.insert(peer, 0, GossipRoute::LocalMessage), Ok(()));
-        let crds = RwLock::new(crds);
+        let crds = RwLockWrapped::new(crds);
         let ping_cache = Mutex::new(new_ping_cache());
         push.refresh_push_active_set(
             &crds,
@@ -1136,7 +1137,7 @@ mod tests {
 
     #[test]
     fn test_purge_old_received_cache() {
-        let crds = RwLock::<Crds>::default();
+        let crds = RwLockWrapped::<Crds>::default();
         let push = CrdsGossipPush::default();
         let mut ci = ContactInfo::new_localhost(&solana_sdk::pubkey::new_rand(), 0);
         ci.wallclock = 0;

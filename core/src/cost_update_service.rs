@@ -15,6 +15,7 @@ use {
         thread::{self, Builder, JoinHandle},
     },
 };
+use crate::debugging_lock::RwLockWrapped;
 
 #[derive(Default)]
 pub struct CostUpdateServiceTiming {
@@ -71,7 +72,7 @@ impl CostUpdateService {
     #[allow(clippy::new_ret_no_self)]
     pub fn new(
         blockstore: Arc<Blockstore>,
-        cost_model: Arc<RwLock<CostModel>>,
+        cost_model: Arc<RwLockWrapped<CostModel>>,
         cost_update_receiver: CostUpdateReceiver,
     ) -> Self {
         let thread_hdl = Builder::new()
@@ -90,7 +91,7 @@ impl CostUpdateService {
 
     fn service_loop(
         _blockstore: Arc<Blockstore>,
-        cost_model: Arc<RwLock<CostModel>>,
+        cost_model: Arc<RwLockWrapped<CostModel>>,
         cost_update_receiver: CostUpdateReceiver,
     ) {
         let mut cost_update_service_timing = CostUpdateServiceTiming::default();
@@ -113,7 +114,7 @@ impl CostUpdateService {
     }
 
     fn update_cost_model(
-        cost_model: &RwLock<CostModel>,
+        cost_model: &RwLockWrapped<CostModel>,
         execute_timings: &mut ExecuteTimings,
     ) -> u64 {
         let mut update_count = 0_u64;
@@ -143,7 +144,7 @@ mod tests {
 
     #[test]
     fn test_update_cost_model_with_empty_execute_timings() {
-        let cost_model = Arc::new(RwLock::new(CostModel::default()));
+        let cost_model = Arc::new(RwLockWrapped::new(CostModel::default()));
         let mut empty_execute_timings = ExecuteTimings::default();
 
         assert_eq!(
@@ -154,7 +155,7 @@ mod tests {
 
     #[test]
     fn test_update_cost_model_with_execute_timings() {
-        let cost_model = Arc::new(RwLock::new(CostModel::default()));
+        let cost_model = Arc::new(RwLockWrapped::new(CostModel::default()));
         let mut execute_timings = ExecuteTimings::default();
 
         let program_key_1 = Pubkey::new_unique();
@@ -225,7 +226,7 @@ mod tests {
 
     #[test]
     fn test_update_cost_model_with_error_execute_timings() {
-        let cost_model = Arc::new(RwLock::new(CostModel::default()));
+        let cost_model = Arc::new(RwLockWrapped::new(CostModel::default()));
         let mut execute_timings = ExecuteTimings::default();
         let program_key_1 = Pubkey::new_unique();
 

@@ -20,6 +20,7 @@ pub mod gossip_error;
 pub mod gossip_service;
 pub mod ping_pong;
 pub mod weighted_shuffle;
+mod debugging_lock;
 
 #[macro_use]
 extern crate log;

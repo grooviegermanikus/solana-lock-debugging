@@ -63,7 +63,7 @@ fn test_node(exit: &Arc<AtomicBool>) -> (Arc<ClusterInfo>, GossipService, UdpSoc
 fn test_node_with_bank(
     node_keypair: Arc<Keypair>,
     exit: &Arc<AtomicBool>,
-    bank_forks: Arc<RwLock<BankForks>>,
+    bank_forks: Arc<RwLockWrapped<BankForks>>,
 ) -> (Arc<ClusterInfo>, GossipService, UdpSocket) {
     let mut test_node = Node::new_localhost_with_pubkey(&node_keypair.pubkey());
     let cluster_info = Arc::new(ClusterInfo::new(
@@ -310,7 +310,7 @@ pub fn cluster_info_scale() {
         vec![100; vote_keypairs.len()],
     );
     let bank0 = Bank::new_for_tests(&genesis_config_info.genesis_config);
-    let bank_forks = Arc::new(RwLock::new(BankForks::new(bank0)));
+    let bank_forks = Arc::new(RwLockWrapped::new(BankForks::new(bank0)));
 
     let nodes: Vec<_> = vote_keypairs
         .into_iter()

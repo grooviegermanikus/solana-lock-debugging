@@ -94,6 +94,7 @@ use {
     },
     thiserror::Error,
 };
+use crate::debugging_lock::RwLockWrapped;
 
 /// The Data plane fanout size, also used as the neighborhood size
 pub const DATA_PLANE_FANOUT: usize = 200;
@@ -158,18 +159,18 @@ pub struct ClusterInfo {
     /// The network
     pub gossip: CrdsGossip,
     /// set the keypair that will be used to sign crds values generated. It is unset only in tests.
-    keypair: RwLock<Arc<Keypair>>,
+    keypair: RwLockWrapped<Arc<Keypair>>,
     /// Network entrypoints
-    entrypoints: RwLock<Vec<ContactInfo>>,
+    entrypoints: RwLockWrapped<Vec<ContactInfo>>,
     outbound_budget: DataBudget,
-    my_contact_info: RwLock<ContactInfo>,
+    my_contact_info: RwLockWrapped<ContactInfo>,
     ping_cache: Mutex<PingCache>,
     stats: GossipStats,
     socket: UdpSocket,
     local_message_pending_push_queue: Mutex<Vec<CrdsValue>>,
     contact_debug_interval: u64, // milliseconds, 0 = disabled
     contact_save_interval: u64,  // milliseconds, 0 = disabled
-    instance: RwLock<NodeInstance>,
+    instance: RwLockWrapped<NodeInstance>,
     contact_info_path: PathBuf,
     socket_addr_space: SocketAddrSpace,
 }
@@ -408,10 +409,10 @@ impl ClusterInfo {
         let id = contact_info.id;
         let me = Self {
             gossip: CrdsGossip::default(),
-            keypair: RwLock::new(keypair),
-            entrypoints: RwLock::default(),
+            keypair: RwLockWrapped::new(keypair),
+            entrypoints: RwLockWrapped::default(),
             outbound_budget: DataBudget::default(),
-            my_contact_info: RwLock::new(contact_info),
+            my_contact_info: RwLockWrapped::new(contact_info),
             ping_cache: Mutex::new(PingCache::new(
                 GOSSIP_PING_CACHE_TTL,
                 GOSSIP_PING_CACHE_RATE_LIMIT_DELAY,
@@ -421,7 +422,7 @@ impl ClusterInfo {
             socket: UdpSocket::bind("0.0.0.0:0").unwrap(),
             local_message_pending_push_queue: Mutex::default(),
             contact_debug_interval: DEFAULT_CONTACT_DEBUG_INTERVAL_MILLIS,
-            instance: RwLock::new(NodeInstance::new(&mut thread_rng(), id, timestamp())),
+            instance: RwLockWrapped::new(NodeInstance::new(&mut thread_rng(), id, timestamp())),
             contact_info_path: PathBuf::default(),
             contact_save_interval: 0, // disabled
             socket_addr_space,
@@ -437,10 +438,10 @@ impl ClusterInfo {
         my_contact_info.id = *new_id;
         ClusterInfo {
             gossip: self.gossip.mock_clone(),
-            keypair: RwLock::new(self.keypair.read().unwrap().clone()),
-            entrypoints: RwLock::new(self.entrypoints.read().unwrap().clone()),
+            keypair: RwLockWrapped::new(self.keypair.read().unwrap().clone()),
+            entrypoints: RwLockWrapped::new(self.entrypoints.read().unwrap().clone()),
             outbound_budget: self.outbound_budget.clone_non_atomic(),
-            my_contact_info: RwLock::new(my_contact_info),
+            my_contact_info: RwLockWrapped::new(my_contact_info),
             ping_cache: Mutex::new(self.ping_cache.lock().unwrap().mock_clone()),
             stats: GossipStats::default(),
             socket: UdpSocket::bind("0.0.0.0:0").unwrap(),
@@ -451,7 +452,7 @@ impl ClusterInfo {
                     .clone(),
             ),
             contact_debug_interval: self.contact_debug_interval,
-            instance: RwLock::new(NodeInstance::new(&mut thread_rng(), *new_id, timestamp())),
+            instance: RwLockWrapped::new(NodeInstance::new(&mut thread_rng(), *new_id, timestamp())),
             contact_info_path: PathBuf::default(),
             contact_save_interval: 0, // disabled
             ..*self
@@ -1651,7 +1652,7 @@ impl ClusterInfo {
     fn handle_purge(
         &self,
         thread_pool: &ThreadPool,
-        bank_forks: Option<&RwLock<BankForks>>,
+        bank_forks: Option<&RwLockWrapped<BankForks>>,
         stakes: &HashMap<Pubkey, u64>,
     ) {
         let self_pubkey = self.id();
@@ -1701,7 +1702,7 @@ impl ClusterInfo {
     /// randomly pick a node and ask them for updates asynchronously
     pub fn gossip(
         self: Arc<Self>,
-        bank_forks: Option<Arc<RwLock<BankForks>>>,
+        bank_forks: Option<Arc<RwLockWrapped<BankForks>>>,
         sender: PacketBatchSender,
         gossip_validators: Option<HashSet<Pubkey>>,
         exit: Arc<AtomicBool>,
@@ -2554,7 +2555,7 @@ impl ClusterInfo {
     fn run_listen(
         &self,
         recycler: &PacketBatchRecycler,
-        bank_forks: Option<&RwLock<BankForks>>,
+        bank_forks: Option<&RwLockWrapped<BankForks>>,
         receiver: &Receiver<Vec<(/*from:*/ SocketAddr, Protocol)>>,
         response_sender: &PacketBatchSender,
         thread_pool: &ThreadPool,
@@ -2636,7 +2637,7 @@ impl ClusterInfo {
 
     pub(crate) fn listen(
         self: Arc<Self>,
-        bank_forks: Option<Arc<RwLock<BankForks>>>,
+        bank_forks: Option<Arc<RwLockWrapped<BankForks>>>,
         requests_receiver: Receiver<Vec<(/*from:*/ SocketAddr, Protocol)>>,
         response_sender: PacketBatchSender,
         should_check_duplicate_instance: bool,
@@ -2731,7 +2732,7 @@ impl ClusterInfo {
 // Returns root bank's epoch duration. Falls back on
 //     DEFAULT_SLOTS_PER_EPOCH * DEFAULT_MS_PER_SLOT
 // if there are no working banks.
-fn get_epoch_duration(bank_forks: Option<&RwLock<BankForks>>, stats: &GossipStats) -> Duration {
+fn get_epoch_duration(bank_forks: Option<&RwLockWrapped<BankForks>>, stats: &GossipStats) -> Duration {
     let num_slots = match bank_forks {
         None => {
             stats.get_epoch_duration_no_working_bank.add_relaxed(1);

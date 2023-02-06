@@ -33,10 +33,11 @@ use {
         time::Duration,
     },
 };
+use crate::debugging_lock::RwLockWrapped;
 
 #[derive(Default)]
 pub struct CrdsGossip {
-    pub crds: RwLock<Crds>,
+    pub crds: RwLockWrapped<Crds>,
     pub push: CrdsGossipPush,
     pub pull: CrdsGossipPull,
 }
@@ -346,7 +347,7 @@ impl CrdsGossip {
     pub(crate) fn mock_clone(&self) -> Self {
         let crds = self.crds.read().unwrap().mock_clone();
         Self {
-            crds: RwLock::new(crds),
+            crds: RwLockWrapped::new(crds),
             push: self.push.mock_clone(),
             pull: self.pull.mock_clone(),
         }

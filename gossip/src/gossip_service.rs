@@ -26,6 +26,7 @@ use {
         time::{Duration, Instant},
     },
 };
+use crate::debugging_lock::RwLockWrapped;
 
 pub struct GossipService {
     thread_hdls: Vec<JoinHandle<()>>,
@@ -34,7 +35,7 @@ pub struct GossipService {
 impl GossipService {
     pub fn new(
         cluster_info: &Arc<ClusterInfo>,
-        bank_forks: Option<Arc<RwLock<BankForks>>>,
+        bank_forks: Option<Arc<RwLockWrapped<BankForks>>>,
         gossip_socket: UdpSocket,
         gossip_validators: Option<HashSet<Pubkey>>,
         should_check_duplicate_instance: bool,
