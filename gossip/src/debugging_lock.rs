@@ -14,18 +14,21 @@ impl<T> RwLockWrapped<T> {
 
     pub fn write(&self) -> LockResult<RwLockWriteGuard<'_, T>> {
         println!("enter WRITE");
+        info!("enter WRITE");
 
         write_smart(&self.0)
     }
 
     pub fn try_read(&self) -> TryLockResult<RwLockReadGuard<'_, T>> {
         println!("enter TRYWRITE");
+        info!("enter TRYWRITE");
 
         self.0.try_read()
     }
 
     pub fn read(&self) -> LockResult<RwLockReadGuard<'_, T>> {
         println!("enter READ");
+        info!("enter READ");
 
         self.0.read()
     }
@@ -42,6 +45,7 @@ impl<T: Default> Default for RwLockWrapped<T> {
 
 fn write_smart<T: ?Sized>(rwlock: &RwLock<T>) -> LockResult<RwLockWriteGuard<'_, T>> {
     println!("ENTER WRITELOCK");
+    info!("ENTER WRITELOCK");
     let mut cnt: u64 = 0;
     // consider using SystemTime here
     let wait_since = Instant::now();
@@ -74,6 +78,7 @@ fn write_smart<T: ?Sized>(rwlock: &RwLock<T>) -> LockResult<RwLockWriteGuard<'_,
 // custom handling
 fn handle_block_event(since: Instant, elapsed: Duration) {
     println!("LOOP {:?}, elapsed {:?}", since, elapsed);
+    info!("LOOP {:?}, elapsed {:?}", since, elapsed);
     // LOGGER.log();
 }
 
